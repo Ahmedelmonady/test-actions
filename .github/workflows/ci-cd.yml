@@ -1,0 +1,120 @@
+name: Release Deployment
+
+# Trigger the workflow when a stable release is published or updated
+on:
+  release:
+    types: [released, edited]
+
+# Minimal permissions for security
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    
+    # Only run for stable releases (non-prerelease, non-draft)
+    if: ${{ !github.event.release.prerelease && !github.event.release.draft }}
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Debug release event
+      run: |
+        echo "=== RELEASE EVENT DEBUG ==="
+        echo "Action: ${{ github.event.action }}"
+        echo "Release tag: ${{ github.event.release.tag_name }}"
+        echo "Release name: ${{ github.event.release.name }}"
+        echo "Is prerelease: ${{ github.event.release.prerelease }}"
+        echo "Is draft: ${{ github.event.release.draft }}"
+        echo "Make latest: ${{ github.event.release.make_latest }}"
+        echo "Target commitish: ${{ github.event.release.target_commitish }}"
+        echo "=== END DEBUG ==="
+        
+    - name: Check if should deploy
+      run: |
+        if [[ "${{ github.event.release.draft }}" == "true" ]]; then
+          echo "❌ Skipping: Release is draft"
+          exit 1
+        elif [[ "${{ github.event.action }}" == "released" ]]; then
+          echo "✅ Should deploy: New release published"
+        elif [[ "${{ github.event.action }}" == "edited" && "${{ github.event.release.prerelease }}" == "false" ]]; then
+          echo "✅ Should deploy: Release edited and not prerelease"
+        else
+          echo "❌ Skipping: Action=${{ github.event.action }}, Prerelease=${{ github.event.release.prerelease }}"
+          exit 1
+    - name: Publish release description
+      run: |
+        echo "## 📋 Release Notes for ${{ github.event.release.tag_name }}"
+        echo ""
+        echo "### ${{ github.event.release.name }}"
+        echo ""
+        if [[ -n "${{ github.event.release.body }}" ]]; then
+          echo "${{ github.event.release.body }}"
+        else
+          echo "*No release notes provided.*"
+        fi
+        echo ""
+        echo "---"
+        echo "**Release Information:**"
+        echo "- **Tag:** \`${{ github.event.release.tag_name }}\`"
+        echo "- **Published:** ${{ github.event.release.published_at }}"
+        echo "- **Author:** ${{ github.event.release.author.login }}"
+        if [[ "${{ github.event.release.prerelease }}" == "true" ]]; then
+          echo "- **Type:** 🚧 Pre-release"
+        else
+          echo "- **Type:** ✅ Stable Release"
+        fi
+        
+    - name: Save release notes to file
+      run: |
+        cat > RELEASE_NOTES.md << 'EOF'
+        # Release ${{ github.event.release.tag_name }}
+        
+        ## ${{ github.event.release.name }}
+        
+        ${{ github.event.release.body }}
+        
+        ---
+        
+        **Release Details:**
+        - Tag: `${{ github.event.release.tag_name }}`
+        - Published: ${{ github.event.release.published_at }}
+        - Author: ${{ github.event.release.author.login }}
+        - Type: ${{ github.event.release.prerelease == 'true' && 'Pre-release' || 'Stable Release' }}
+        
+        EOF
+        
+        echo "📝 Release notes saved to RELEASE_NOTES.md"
+        echo "File contents:"
+        cat RELEASE_NOTES.md
+        
+    - name: Setup Node.js
+      if: hashFiles('package.json') != ''
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        cache: 'npm'
+        
+    - name: Install dependencies
+      if: hashFiles('package.json') != ''
+      run: npm ci
+      
+    - name: Build project
+      if: hashFiles('package.json') != ''
+      run: npm run build
+      
+    - name: Run tests
+      if: hashFiles('package.json') != ''
+      run: npm test
+      
+    - name: Deploy to production
+      run: |
+        echo "Deploying release ${{ github.event.release.tag_name }} to production"
+        # Add your deployment commands here
+        
+    - name: Notify success
+      run: |
+        echo "✅ Successfully processed release: ${{ github.event.release.tag_name }}"
