@@ -1,0 +1,53 @@
+name: Release Created
+
+# Trigger the workflow when a release is created
+on:
+  release:
+    types: [created]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    
+    # Only run if it's not a prerelease or draft
+    if: ${{ !github.event.release.prerelease && !github.event.release.draft }}
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Get release info
+      run: |
+        echo "Release tag: ${{ github.event.release.tag_name }}"
+        echo "Release name: ${{ github.event.release.name }}"
+        echo "Release body: ${{ github.event.release.body }}"
+        echo "Is prerelease: ${{ github.event.release.prerelease }}"
+        echo "Is draft: ${{ github.event.release.draft }}"
+        
+    - name: Setup Node.js
+      if: hashFiles('package.json') != ''
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        cache: 'npm'
+        
+    - name: Install dependencies
+      if: hashFiles('package.json') != ''
+      run: npm ci
+      
+    - name: Build project
+      if: hashFiles('package.json') != ''
+      run: npm run build
+      
+    - name: Run tests
+      if: hashFiles('package.json') != ''
+      run: npm test
+      
+    - name: Deploy to production (example)
+      run: |
+        echo "Deploying release ${{ github.event.release.tag_name }} to production"
+        # Add your deployment commands here
+        
+    - name: Notify success
+      run: |
+        echo "✅ Successfully processed release: ${{ github.event.release.tag_name }}"
